@@ -3,7 +3,7 @@ import { HTTPServer } from "../http_server.ts";
 
 const httpServer = new HTTPServer();
 httpServer.add("GET", "/", (_req, rep) => {
-  rep.statusCode = 200;
+  rep.statusCode = Status.Teapot;
   rep.addHeader("working", "true")
   return JSON.stringify(
     {
