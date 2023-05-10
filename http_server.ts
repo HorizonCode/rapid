@@ -2,10 +2,12 @@ import {
   Status,
   STATUS_TEXT,
 } from "https://deno.land/std@0.186.0/http/http_status.ts";
-
+import * as path from "https://deno.land/std@0.185.0/path/mod.ts";
 type ListenOptions = {
   port: number;
   host?: string;
+  staticLocalDir?: string;
+  staticServePath?: string;
 };
 type HTTPMethod = "GET" | "POST" | "PUSH" | "DELETE";
 type RouteHandler = (
@@ -19,6 +21,8 @@ export class HTTPServer {
   private urlRegex = new RegExp(/(http[s]?:\/\/)?([^\/\s]+\/)(.*)/);
   private server?: Deno.Listener;
   private routes = new Map<string, Route>();
+  private staticLocalDir?: string;
+  private staticServePath?: string;
 
   async listen(options: ListenOptions) {
     this.server = Deno.listen({
@@ -26,12 +30,51 @@ export class HTTPServer {
       hostname: options.host,
     });
 
+    if (options.staticLocalDir && options.staticServePath) {
+      this.staticLocalDir = options.staticLocalDir;
+      this.staticServePath = options.staticServePath;
+    }
+
     for await (const conn of this.server) {
       const httpConn = Deno.serveHttp(conn);
       for await (const requestEvent of httpConn) {
-        const urlPath = this.urlRegex.exec(requestEvent.request.url);
-        const path = urlPath && urlPath.length > 3 ? "/" + urlPath[3] : "/";
-        const routeName = `${requestEvent.request.method}@${path}`;
+        const url = new URL(requestEvent.request.url);
+        const filepath = decodeURIComponent(url.pathname);
+
+        if (this.staticServePath && filepath.startsWith(this.staticServePath)) {
+          console.log(filepath, this.staticServePath);
+          const fileDir = filepath.split("/").slice(2).join("/");
+          const pathLoc = path.join(
+            Deno.cwd(),
+            this.staticLocalDir as string,
+            fileDir,
+          );
+          console.log(pathLoc);
+          let file;
+          try {
+            file = await Deno.open(pathLoc, { read: true });
+          } catch {
+            // If the file cannot be opened, return a "404 Not Found" response
+            await requestEvent.respondWith(
+              new Response(
+                JSON.stringify({
+                  code: 404,
+                  message: `File ${filepath} not found!`,
+                }),
+                {
+                  status: Status.NotFound,
+                },
+              ),
+            );
+            continue;
+          }
+
+          const readableStream = file.readable;
+          const response = new Response(readableStream);
+          await requestEvent.respondWith(response);
+          return;
+        }
+        const routeName = `${requestEvent.request.method}@${filepath}`;
         const route = this.routes.has(routeName)
           ? this.routes.get(routeName)
           : undefined;
@@ -42,7 +85,7 @@ export class HTTPServer {
             requestEvent.request,
             routeReply,
           );
-          requestEvent.respondWith(
+          await requestEvent.respondWith(
             new Response(handler as string, {
               status: routeReply.statusCode,
               headers: routeReply.headers,
@@ -50,7 +93,7 @@ export class HTTPServer {
             }),
           );
         } else {
-          requestEvent.respondWith(
+          await requestEvent.respondWith(
             new Response(
               JSON.stringify({
                 code: 404,

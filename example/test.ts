@@ -4,7 +4,7 @@ import { HTTPServer } from "../http_server.ts";
 const httpServer = new HTTPServer();
 httpServer.add("GET", "/", (_req, rep) => {
   rep.statusCode = Status.Teapot;
-  rep.addHeader("working", "true")
+  rep.addHeader("working", "true");
   return JSON.stringify(
     {
       code: Status.Teapot,
@@ -16,4 +16,6 @@ httpServer.add("GET", "/", (_req, rep) => {
 });
 httpServer.listen({
   port: 8080,
+  staticLocalDir: "/static",
+  staticServePath: "/assets",
 });
