@@ -130,6 +130,10 @@ export class HTTPServer {
 
   add(method: HTTPMethod, path: string, handler: RouteHandler) {
     const route = new Route(path, method, handler);
+    if (this.routes.has(route.routeName)) {
+      console.log(`${route.routeName} already registered!`);
+      return;
+    }
     this.routes.set(route.routeName, route);
     console.log(`${route.routeName} added`);
   }
