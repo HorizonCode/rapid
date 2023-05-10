@@ -30,6 +30,12 @@ export class HTTPServer {
       hostname: options.host,
     });
 
+    console.log(
+      `Listening on ${
+        options.host ? options.host : "http://localhost"
+      }:${options.port} !`,
+    );
+
     if (options.staticLocalDir && options.staticServePath) {
       this.staticLocalDir = options.staticLocalDir;
       this.staticServePath = options.staticServePath;
@@ -42,14 +48,12 @@ export class HTTPServer {
         const filepath = decodeURIComponent(url.pathname);
 
         if (this.staticServePath && filepath.startsWith(this.staticServePath)) {
-          console.log(filepath, this.staticServePath);
           const fileDir = filepath.split("/").slice(2).join("/");
           const pathLoc = path.join(
             Deno.cwd(),
             this.staticLocalDir as string,
             fileDir,
           );
-          console.log(pathLoc);
           let file;
           try {
             file = await Deno.open(pathLoc, { read: true });
