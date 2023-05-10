@@ -18,7 +18,6 @@ type RouteHandler = (
   | unknown;
 
 export class HTTPServer {
-  private urlRegex = new RegExp(/(http[s]?:\/\/)?([^\/\s]+\/)(.*)/);
   private server?: Deno.Listener;
   private routes = new Map<string, Route>();
   private staticLocalDir?: string;
