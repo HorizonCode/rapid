@@ -43,7 +43,12 @@ export class HTTPServer {
     }
 
     for await (const conn of this.server) {
-      const httpConn = Deno.serveHttp(conn);
+      this.handleHttp(conn);
+    }
+  }
+
+  private async handleHttp(conn: Deno.Conn){
+    const httpConn = Deno.serveHttp(conn);
       for await (const requestEvent of httpConn) {
         const url = new URL(requestEvent.request.url);
         const filepath = decodeURIComponent(url.pathname);
@@ -111,7 +116,6 @@ export class HTTPServer {
           );
         }
       }
-    }
   }
 
   get(path: string, handler: RouteHandler) {
