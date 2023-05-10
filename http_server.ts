@@ -3,6 +3,8 @@ import {
   STATUS_TEXT,
 } from "https://deno.land/std@0.186.0/http/http_status.ts";
 import * as path from "https://deno.land/std@0.185.0/path/mod.ts";
+import * as cookie from "https://deno.land/std@0.185.0/http/cookie.ts";
+
 type ListenOptions = {
   port: number;
   host?: string;
@@ -11,7 +13,7 @@ type ListenOptions = {
 };
 type HTTPMethod = "GET" | "POST" | "PUSH" | "DELETE";
 type RouteHandler = (
-  req: Request,
+  req: RouteRequest,
   rep: RouteReply,
 ) =>
   | Promise<unknown>
@@ -85,7 +87,7 @@ export class HTTPServer {
         if (route) {
           const routeReply: RouteReply = new RouteReply();
           const handler = await route.handler(
-            requestEvent.request,
+            new RouteRequest(requestEvent.request),
             routeReply,
           );
           await requestEvent.respondWith(
@@ -153,14 +155,74 @@ export class Route {
   }
 }
 
+export class RouteRequest {
+  headers: Headers;
+
+  constructor(request: Request) {
+    this.headers = request.headers;
+  }
+
+  header(name: string) {
+    const matchingHeader = Array.from(this.headers.keys()).find((headerName) =>
+      headerName === name
+    );
+    return matchingHeader ? this.headers.get(matchingHeader) : undefined;
+  }
+
+  cookie(name: string) {
+    const allCookies = cookie.getCookies(this.headers);
+    const allCookieNames = Object.keys(allCookies);
+    return allCookieNames.includes(name) ? allCookies[name] : undefined;
+  }
+}
+
 export class RouteReply {
   headers: Headers = new Headers();
   statusCode: Status = Status.OK;
 
-  addHeader(name: string, value: string) {
-    this.headers.append(name, value);
+  header(name: string, value: string): RouteReply {
+    this.headers.set(name, value);
+    return this;
   }
-}
 
-export class RouteProcessor {
+  status(code: Status): RouteReply {
+    this.statusCode = code;
+    return this;
+  }
+
+  type(type: string): RouteReply {
+    this.header("Content-Type", type);
+    return this;
+  }
+
+  cookie(name: string, value: string, attributes?: {
+    expires?: Date | number;
+    maxAge?: number;
+    domain?: string;
+    path?: string;
+    secure?: boolean;
+    httpOnly?: boolean;
+    sameSite?: "Strict" | "Lax" | "None";
+    unparsed?: string[];
+  }) {
+    if (!value) {
+      cookie.deleteCookie(this.headers, name, {
+        domain: attributes?.domain,
+        path: attributes?.path,
+      });
+    } else {
+      cookie.setCookie(this.headers, {
+        name: name,
+        value: value,
+        expires: attributes?.expires,
+        maxAge: attributes?.maxAge,
+        domain: attributes?.domain,
+        path: attributes?.path,
+        secure: attributes?.secure,
+        httpOnly: attributes?.httpOnly,
+        sameSite: attributes?.sameSite,
+        unparsed: attributes?.unparsed,
+      });
+    }
+  }
 }

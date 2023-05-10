@@ -3,8 +3,11 @@ import { HTTPServer } from "../http_server.ts";
 
 const httpServer = new HTTPServer();
 httpServer.add("GET", "/", (_req, rep) => {
-  rep.statusCode = Status.Teapot;
-  rep.addHeader("working", "true");
+  rep.status(Status.Teapot)
+    .header("working", "true")
+    .cookie("working", "true");
+  
+  console.log(_req.cookie("working"));
   return JSON.stringify(
     {
       code: Status.Teapot,
