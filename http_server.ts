@@ -18,6 +18,10 @@ type RouteHandler = (
 ) =>
   | Promise<unknown>
   | unknown;
+export type RouteParam = {
+  idx: number;
+  paramKey: string;
+};
 
 export class HTTPServer {
   private server?: Deno.Listener;
@@ -47,75 +51,109 @@ export class HTTPServer {
     }
   }
 
-  private async handleHttp(conn: Deno.Conn){
+  private async handleHttp(conn: Deno.Conn) {
     const httpConn = Deno.serveHttp(conn);
-      for await (const requestEvent of httpConn) {
-        const url = new URL(requestEvent.request.url);
-        const filepath = decodeURIComponent(url.pathname);
+    for await (const requestEvent of httpConn) {
+      const url = new URL(requestEvent.request.url);
+      const filepath = decodeURIComponent(url.pathname);
 
-        if (this.staticServePath && filepath.startsWith(this.staticServePath)) {
-          const fileDir = filepath.split("/").slice(2).join("/");
-          const pathLoc = path.join(
-            Deno.cwd(),
-            this.staticLocalDir as string,
-            fileDir,
-          );
-          let file;
-          try {
-            file = await Deno.open(pathLoc, { read: true });
-          } catch {
-            // If the file cannot be opened, return a "404 Not Found" response
-            await requestEvent.respondWith(
-              new Response(
-                JSON.stringify({
-                  code: 404,
-                  message: `File ${filepath} not found!`,
-                }),
-                {
-                  status: Status.NotFound,
-                },
-              ),
-            );
-            continue;
-          }
-
-          const readableStream = file.readable;
-          const response = new Response(readableStream);
-          await requestEvent.respondWith(response);
-          return;
-        }
-        const routeName = `${requestEvent.request.method}@${filepath}`;
-        const route = this.routes.has(routeName)
-          ? this.routes.get(routeName)
-          : undefined;
-
-        if (route) {
-          const routeReply: RouteReply = new RouteReply();
-          const handler = await route.handler(
-            new RouteRequest(requestEvent.request),
-            routeReply,
-          );
-          await requestEvent.respondWith(
-            new Response(handler as string, {
-              status: routeReply.statusCode,
-              headers: routeReply.headers,
-              statusText: STATUS_TEXT[routeReply.statusCode],
-            }),
-          );
-        } else {
+      if (this.staticServePath && filepath.startsWith(this.staticServePath)) {
+        const fileDir = filepath.split("/").slice(2).join("/");
+        const pathLoc = path.join(
+          Deno.cwd(),
+          this.staticLocalDir as string,
+          fileDir,
+        );
+        let file;
+        try {
+          file = await Deno.open(pathLoc, { read: true });
+        } catch {
+          // If the file cannot be opened, return a "404 Not Found" response
           await requestEvent.respondWith(
             new Response(
               JSON.stringify({
                 code: 404,
-                message: `Route ${routeName} not found!`,
+                message: `File ${filepath} not found!`,
               }),
               {
                 status: Status.NotFound,
               },
             ),
           );
+          continue;
         }
+
+        const readableStream = file.readable;
+        const response = new Response(readableStream);
+        await requestEvent.respondWith(response);
+        return;
       }
+      const routeRequest = new RouteRequest(requestEvent.request);
+      const routeReply: RouteReply = new RouteReply();
+      const routeName = `${requestEvent.request.method}@${filepath}`;
+      let route = this.routes.has(routeName)
+        ? this.routes.get(routeName)
+        : undefined;
+
+      if (route) {
+        const handler = await route.handler(
+          routeRequest,
+          routeReply,
+        );
+        await requestEvent.respondWith(
+          new Response(handler as string, {
+            status: routeReply.statusCode,
+            headers: routeReply.headers,
+            statusText: STATUS_TEXT[routeReply.statusCode],
+          }),
+        );
+        continue;
+      }
+
+      route = Array.from(this.routes.values()).find((route) =>
+        routeWithParamsRouteMatcher(routeRequest, route)
+      );
+
+      if (route) {
+        const routeParamsMap: RouteParam[] = extractRouteParams(route.path);
+        const routeSegments: string[] = filepath.split("/");
+        routeRequest.pathParams = routeParamsMap.reduce(
+          (accum: { [key: string]: string | number }, curr: RouteParam) => {
+            return {
+              ...accum,
+              [curr.paramKey]: routeSegments[curr.idx],
+            };
+          },
+          {},
+        );
+
+        const handler = await route.handler(
+          routeRequest,
+          routeReply,
+        );
+        await requestEvent.respondWith(
+          new Response(handler as string, {
+            status: routeReply.statusCode,
+            headers: routeReply.headers,
+            statusText: STATUS_TEXT[routeReply.statusCode],
+          }),
+        );
+
+        continue;
+      }
+
+      await requestEvent.respondWith(
+        new Response(
+          JSON.stringify({
+            code: 404,
+            message: `Route ${routeName} not found!`,
+          }),
+          {
+            status: Status.NotFound,
+          },
+        ),
+      );
+    }
   }
 
   get(path: string, handler: RouteHandler) {
@@ -145,6 +183,31 @@ export class HTTPServer {
   }
 }
 
+export const routeWithParamsRouteMatcher = (
+  req: RouteRequest,
+  route: Route,
+): boolean => {
+  const routeMatcherRegEx = new RegExp(`^${routeParamPattern(route.path)}$`);
+  return (
+    req.method === route.method &&
+    route.path.includes("/:") &&
+    routeMatcherRegEx.test(req.path)
+  );
+};
+
+export const routeParamPattern: (route: string) => string = (route) =>
+  route.replace(/\/\:[^/]{1,}/gi, "/[^/]{1,}").replace(/\//g, "\\/");
+
+export const extractRouteParams: (route: string) => RouteParam[] = (route) =>
+  route.split("/").reduce((accum: RouteParam[], curr: string, idx: number) => {
+    if (/:[A-Za-z1-9]{1,}/.test(curr)) {
+      const paramKey: string = curr.replace(":", "");
+      const param: RouteParam = { idx, paramKey };
+      return [...accum, param];
+    }
+    return accum;
+  }, []);
+
 export class Route {
   routeName: string;
   path: string;
@@ -160,10 +223,19 @@ export class Route {
 }
 
 export class RouteRequest {
+  url: string;
+  path: string;
   headers: Headers;
+  method: string;
+  pathParams: { [key: string]: string | number };
 
   constructor(request: Request) {
+    this.url = request.url;
+    const urlObj = new URL(request.url);
+    this.path = decodeURIComponent(urlObj.pathname);
     this.headers = request.headers;
+    this.method = request.method;
+    this.pathParams = {};
   }
 
   header(name: string) {
@@ -208,7 +280,7 @@ export class RouteReply {
     httpOnly?: boolean;
     sameSite?: "Strict" | "Lax" | "None";
     unparsed?: string[];
-  }) {
+  }): RouteReply {
     if (!value) {
       cookie.deleteCookie(this.headers, name, {
         domain: attributes?.domain,
@@ -228,5 +300,6 @@ export class RouteReply {
         unparsed: attributes?.unparsed,
       });
     }
+    return this;
   }
 }
