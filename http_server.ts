@@ -195,6 +195,12 @@ export class HTTPServer {
     }
   }
 
+  close() {
+    if (this.server) {
+      this.server.close();
+    }
+  }
+
   error(handler: RouteHandler) {
     this.notFoundHandler = handler;
   }
