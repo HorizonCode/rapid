@@ -189,7 +189,7 @@ export const routeWithParamsRouteMatcher = (
 ): boolean => {
   const routeMatcherRegEx = new RegExp(`^${routeParamPattern(route.path)}$`);
   return (
-    req.method === route.method &&
+    req.method as HTTPMethod === route.method &&
     route.path.includes("/:") &&
     routeMatcherRegEx.test(req.path)
   );
@@ -226,7 +226,7 @@ export class RouteRequest {
   url: string;
   path: string;
   headers: Headers;
-  method: string;
+  method: HTTPMethod;
   queryParams: { [key: string]: string };
   pathParams: { [key: string]: string };
 
@@ -235,7 +235,7 @@ export class RouteRequest {
     const urlObj = new URL(request.url);
     this.path = decodeURIComponent(urlObj.pathname);
     this.headers = request.headers;
-    this.method = request.method;
+    this.method = request.method as HTTPMethod;
     this.pathParams = {};
     this.queryParams = this.paramsToObject(urlObj.searchParams.entries());
   }
