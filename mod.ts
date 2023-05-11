@@ -23,8 +23,7 @@ type RouteMiddlewareHandler = (
   req: RouteRequest,
   done: () => Promise<unknown>,
 ) =>
-  | Promise<void>
-  | void;
+  | Promise<void>;
 
 type RouteParam = {
   idx: number;
