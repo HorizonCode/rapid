@@ -22,8 +22,7 @@ type RouteHandler = (
 type RouteMiddlewareHandler = (
   req: RouteRequest,
   done: () => Promise<unknown>,
-) =>
-  | Promise<void>;
+) => Promise<void>;
 
 type RouteParam = {
   idx: number;
@@ -100,14 +99,22 @@ export class HTTPServer {
   private async handleHttp(conn: Deno.Conn) {
     const httpConn = Deno.serveHttp(conn);
     for await (const requestEvent of httpConn) {
-      const routeRequest = new RouteRequest(requestEvent.request, conn);
+      const filepath = decodeURIComponent(
+        "/" + requestEvent.request.url.split("/").slice(3).join("/"),
+      );
+      const routeRequest = new RouteRequest(
+        requestEvent.request,
+        conn,
+        filepath,
+        requestEvent.request.url,
+      );
       const routeReply: RouteReply = new RouteReply();
-      const url = new URL(requestEvent.request.url);
-      const filepath = decodeURIComponent(url.pathname);
+
       if (filepath.startsWith("/_static")) {
         this.handleNotFound(routeRequest, routeReply, requestEvent);
         continue;
       }
+
       let resolveAction: (value?: unknown) => void = () => {};
       let middlewarePromise;
 
@@ -131,21 +138,20 @@ export class HTTPServer {
         try {
           file = await Deno.open(pathLoc, { read: true });
         } catch {
-          this.handleNotFound(routeRequest, routeReply, requestEvent);
           if (middlewarePromise) resolveAction();
+          this.handleNotFound(routeRequest, routeReply, requestEvent);
           continue;
         }
 
         const readableStream = file.readable;
         const response = new Response(readableStream);
-        await requestEvent.respondWith(response);
         if (middlewarePromise) resolveAction();
+        await requestEvent.respondWith(response);
         return;
       }
+
       const routeName = `${requestEvent.request.method}@${filepath}`;
-      let route = this.routes.has(routeName)
-        ? this.routes.get(routeName)
-        : undefined;
+      let route = this.routes.get(routeName);
 
       if (route) {
         let handler = await route.handler(
@@ -157,6 +163,7 @@ export class HTTPServer {
           handler = JSON.stringify(handler, null, 2);
         }
 
+        if (middlewarePromise) resolveAction();
         await requestEvent.respondWith(
           new Response(handler as string, {
             status: routeReply.statusCode,
@@ -164,7 +171,6 @@ export class HTTPServer {
             statusText: STATUS_TEXT[routeReply.statusCode],
           }),
         );
-        if (middlewarePromise) resolveAction();
         continue;
       }
 
@@ -189,6 +195,7 @@ export class HTTPServer {
           routeRequest,
           routeReply,
         );
+        if (middlewarePromise) resolveAction();
         await requestEvent.respondWith(
           new Response(handler as string, {
             status: routeReply.statusCode,
@@ -196,11 +203,10 @@ export class HTTPServer {
             statusText: STATUS_TEXT[routeReply.statusCode],
           }),
         );
-        if (middlewarePromise) resolveAction();
         continue;
       }
-      this.handleNotFound(routeRequest, routeReply, requestEvent);
       if (middlewarePromise) resolveAction();
+      this.handleNotFound(routeRequest, routeReply, requestEvent);
     }
   }
 
@@ -293,14 +299,13 @@ export class RouteRequest {
   pathParams: { [key: string]: string };
   private remoteIpAddr: string;
 
-  constructor(request: Request, conn: Deno.Conn) {
-    this.url = request.url;
-    const urlObj = new URL(request.url);
-    this.path = decodeURIComponent(urlObj.pathname);
+  constructor(request: Request, conn: Deno.Conn, path: string, url: string) {
+    this.url = url;
+    this.path = decodeURIComponent(path);
     this.headers = request.headers;
     this.method = request.method as HTTPMethod;
     this.pathParams = {};
-    this.queryParams = this.paramsToObject(urlObj.searchParams.entries());
+    this.queryParams = this.paramsToObject(new URL(url).searchParams.entries());
     this.remoteIpAddr = "hostname" in conn.remoteAddr
       ? conn.remoteAddr["hostname"]
       : "127.0.0.1";
