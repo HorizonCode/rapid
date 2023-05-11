@@ -118,7 +118,7 @@ export class HTTPServer {
         const routeParamsMap: RouteParam[] = extractRouteParams(route.path);
         const routeSegments: string[] = filepath.split("/");
         routeRequest.pathParams = routeParamsMap.reduce(
-          (accum: { [key: string]: string | number }, curr: RouteParam) => {
+          (accum: { [key: string]: string }, curr: RouteParam) => {
             return {
               ...accum,
               [curr.paramKey]: routeSegments[curr.idx],
