@@ -227,7 +227,8 @@ export class RouteRequest {
   path: string;
   headers: Headers;
   method: string;
-  pathParams: { [key: string]: string | number };
+  queryParams: { [key: string]: string };
+  pathParams: { [key: string]: string };
 
   constructor(request: Request) {
     this.url = request.url;
@@ -236,19 +237,36 @@ export class RouteRequest {
     this.headers = request.headers;
     this.method = request.method;
     this.pathParams = {};
+    this.queryParams = this.paramsToObject(urlObj.searchParams.entries());
   }
 
-  header(name: string) {
+  private paramsToObject(entries: IterableIterator<[string, string]>) {
+    const result: { [key: string]: string } = {};
+    for (const [key, value] of entries) {
+      result[key] = value;
+    }
+    return result;
+  }
+
+  header(name: string): unknown {
     const matchingHeader = Array.from(this.headers.keys()).find((headerName) =>
       headerName === name
     );
     return matchingHeader ? this.headers.get(matchingHeader) : undefined;
   }
 
-  cookie(name: string) {
+  cookie(name: string): unknown {
     const allCookies = cookie.getCookies(this.headers);
     const allCookieNames = Object.keys(allCookies);
     return allCookieNames.includes(name) ? allCookies[name] : undefined;
+  }
+
+  pathParam(name: string): string {
+    return this.pathParams[name];
+  }
+
+  queryParam(name: string): string {
+    return this.queryParams[name];
   }
 }
 

@@ -23,6 +23,8 @@ httpServer.add("GET", "/api/user/:userId", (req, rep) => {
   rep.status(Status.Teapot)
   .type("application/json");
 
+  console.log(req.queryParams);
+
   return JSON.stringify(
     {
       code: Status.Teapot,
