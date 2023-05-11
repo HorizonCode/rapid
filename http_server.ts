@@ -28,6 +28,7 @@ export class HTTPServer {
   private routes = new Map<string, Route>();
   private staticLocalDir?: string;
   private staticServePath?: string;
+  private notFoundHandler?: RouteHandler;
 
   async listen(options: ListenOptions) {
     this.server = Deno.listen({
@@ -56,6 +57,8 @@ export class HTTPServer {
     for await (const requestEvent of httpConn) {
       const url = new URL(requestEvent.request.url);
       const filepath = decodeURIComponent(url.pathname);
+      const routeRequest = new RouteRequest(requestEvent.request);
+      const routeReply: RouteReply = new RouteReply();
 
       if (this.staticServePath && filepath.startsWith(this.staticServePath)) {
         const fileDir = filepath.split("/").slice(2).join("/");
@@ -69,17 +72,37 @@ export class HTTPServer {
           file = await Deno.open(pathLoc, { read: true });
         } catch {
           // If the file cannot be opened, return a "404 Not Found" response
-          await requestEvent.respondWith(
-            new Response(
-              JSON.stringify({
-                code: 404,
-                message: `File ${filepath} not found!`,
+          if (this.notFoundHandler) {
+            routeReply.status(Status.NotFound);
+            routeReply.type("application/json");
+            const notNoundHandle = await this.notFoundHandler(
+              routeRequest,
+              routeReply,
+            );
+            await requestEvent.respondWith(
+              new Response(notNoundHandle as string, {
+                status: routeReply.statusCode,
+                headers: routeReply.headers,
+                statusText: STATUS_TEXT[routeReply.statusCode],
               }),
-              {
-                status: Status.NotFound,
-              },
-            ),
-          );
+            );
+            continue;
+          } else {
+            await requestEvent.respondWith(
+              new Response(
+                JSON.stringify({
+                  code: 404,
+                  message: `File ${filepath} not found!`,
+                }),
+                {
+                  status: Status.NotFound,
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                },
+              ),
+            );
+          }
           continue;
         }
 
@@ -88,8 +111,6 @@ export class HTTPServer {
         await requestEvent.respondWith(response);
         return;
       }
-      const routeRequest = new RouteRequest(requestEvent.request);
-      const routeReply: RouteReply = new RouteReply();
       const routeName = `${requestEvent.request.method}@${filepath}`;
       let route = this.routes.has(routeName)
         ? this.routes.get(routeName)
@@ -141,19 +162,41 @@ export class HTTPServer {
 
         continue;
       }
-
-      await requestEvent.respondWith(
-        new Response(
-          JSON.stringify({
-            code: 404,
-            message: `Route ${routeName} not found!`,
+      if (this.notFoundHandler) {
+        routeReply.status(Status.NotFound);
+        routeReply.type("application/json");
+        const notNoundHandle = await this.notFoundHandler(
+          routeRequest,
+          routeReply,
+        );
+        await requestEvent.respondWith(
+          new Response(notNoundHandle as string, {
+            status: routeReply.statusCode,
+            headers: routeReply.headers,
+            statusText: STATUS_TEXT[routeReply.statusCode],
           }),
-          {
-            status: Status.NotFound,
-          },
-        ),
-      );
+        );
+      } else {
+        await requestEvent.respondWith(
+          new Response(
+            JSON.stringify({
+              code: 404,
+              message: `Route ${routeName} not found!`,
+            }),
+            {
+              status: Status.NotFound,
+              headers: {
+                "Content-Type": "application/json",
+              },
+            },
+          ),
+        );
+      }
     }
+  }
+
+  error(handler: RouteHandler) {
+    this.notFoundHandler = handler;
   }
 
   get(path: string, handler: RouteHandler) {

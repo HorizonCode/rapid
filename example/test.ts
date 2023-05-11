@@ -3,6 +3,19 @@ import { HTTPServer } from "../http_server.ts";
 
 const httpServer = new HTTPServer();
 
+httpServer.error((req, _rep) => {
+  return JSON.stringify(
+    {
+      code: Status.NotFound,
+      message: "Route not found!",
+      path: req.path,
+      url: req.url
+    },
+    null,
+    2,
+  );
+})
+
 httpServer.add("GET", "/", (req, rep) => {
   rep.status(Status.Teapot)
     .header("working", "true")
