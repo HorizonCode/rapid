@@ -4,7 +4,7 @@ import { HTTPServer } from "../mod.ts";
 const httpServer = new HTTPServer();
 
 httpServer.middleware((req) => {
-  console.log(`User Requested ${req.path}`);
+  console.log(`${req.method} - ${req.ip()} -  ${req.path}`);
 })
 
 httpServer.error((req, _rep) => {

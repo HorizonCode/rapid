@@ -97,7 +97,7 @@ export class HTTPServer {
   private async handleHttp(conn: Deno.Conn) {
     const httpConn = Deno.serveHttp(conn);
     for await (const requestEvent of httpConn) {
-      const routeRequest = new RouteRequest(requestEvent.request);
+      const routeRequest = new RouteRequest(requestEvent.request, conn);
       const routeReply: RouteReply = new RouteReply();
       const url = new URL(requestEvent.request.url);
       const filepath = decodeURIComponent(url.pathname);
@@ -276,8 +276,9 @@ export class RouteRequest {
   method: HTTPMethod;
   queryParams: { [key: string]: string };
   pathParams: { [key: string]: string };
+  private remoteIpAddr: string;
 
-  constructor(request: Request) {
+  constructor(request: Request, conn: Deno.Conn) {
     this.url = request.url;
     const urlObj = new URL(request.url);
     this.path = decodeURIComponent(urlObj.pathname);
@@ -285,6 +286,9 @@ export class RouteRequest {
     this.method = request.method as HTTPMethod;
     this.pathParams = {};
     this.queryParams = this.paramsToObject(urlObj.searchParams.entries());
+    this.remoteIpAddr = "hostname" in conn.remoteAddr
+      ? conn.remoteAddr["hostname"]
+      : "127.0.0.1";
   }
 
   private paramsToObject(entries: IterableIterator<[string, string]>) {
@@ -293,6 +297,19 @@ export class RouteRequest {
       result[key] = value;
     }
     return result;
+  }
+
+  ip() {
+    const cfConnectingIp: string = this.header("cf-connecting-ip") as string;
+    if (cfConnectingIp && cfConnectingIp.length > 0) return cfConnectingIp;
+
+    const xRealIp: string = this.header("x-real-ip") as string;
+    if (xRealIp && xRealIp.length > 0) xRealIp;
+
+    const xForwardedFor: string = this.header("x-forwarded-For") as string;
+    if (xForwardedFor && xForwardedFor.length > 0) return xForwardedFor;
+
+    return this.remoteIpAddr;
   }
 
   header(name: string): unknown {
