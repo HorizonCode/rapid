@@ -9,12 +9,12 @@ httpServer.error((req, _rep) => {
       code: Status.NotFound,
       message: "Route not found!",
       path: req.path,
-      url: req.url
+      url: req.url,
     },
     null,
     2,
   );
-})
+});
 
 httpServer.add("GET", "/", (req, rep) => {
   rep.status(Status.Teapot)
@@ -24,14 +24,10 @@ httpServer.add("GET", "/", (req, rep) => {
 
   console.log(req.cookie("working"));
 
-  return JSON.stringify(
-    {
-      code: Status.Teapot,
-      message: "Hello World!",
-    },
-    null,
-    2,
-  );
+  return {
+    code: Status.Teapot,
+    message: "Hello World!",
+  };
 });
 
 httpServer.add("GET", "/api/user/:userId", (req, rep) => {

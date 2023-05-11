@@ -117,10 +117,15 @@ export class HTTPServer {
         : undefined;
 
       if (route) {
-        const handler = await route.handler(
+        let handler = await route.handler(
           routeRequest,
           routeReply,
         );
+
+        if (typeof (handler) == "object") {
+          handler = JSON.stringify(handler, null, 2);
+        }
+
         await requestEvent.respondWith(
           new Response(handler as string, {
             status: routeReply.statusCode,
