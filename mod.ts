@@ -19,10 +19,14 @@ type RouteHandler = (
   | Promise<unknown>
   | unknown;
 
-type RouteMiddlewareHandler = (req: RouteRequest) =>
+type RouteMiddlewareHandler = (
+  req: RouteRequest,
+  done: () => Promise<unknown>,
+) =>
   | Promise<void>
   | void;
-export type RouteParam = {
+
+type RouteParam = {
   idx: number;
   paramKey: string;
 };
@@ -105,9 +109,16 @@ export class HTTPServer {
         this.handleNotFound(routeRequest, routeReply, requestEvent);
         continue;
       }
+      let resolveAction: (value?: unknown) => void = () => {};
+      let middlewarePromise;
 
       if (this.middlewareHandler) {
-        this.middlewareHandler(routeRequest);
+        middlewarePromise = (): Promise<unknown> => {
+          return new Promise((resolve) => {
+            resolveAction = resolve;
+          });
+        };
+        this.middlewareHandler(routeRequest, middlewarePromise);
       }
 
       if (this.staticServePath && filepath.startsWith(this.staticServePath)) {
@@ -122,12 +133,14 @@ export class HTTPServer {
           file = await Deno.open(pathLoc, { read: true });
         } catch {
           this.handleNotFound(routeRequest, routeReply, requestEvent);
+          if (middlewarePromise) resolveAction();
           continue;
         }
 
         const readableStream = file.readable;
         const response = new Response(readableStream);
         await requestEvent.respondWith(response);
+        if (middlewarePromise) resolveAction();
         return;
       }
       const routeName = `${requestEvent.request.method}@${filepath}`;
@@ -152,6 +165,7 @@ export class HTTPServer {
             statusText: STATUS_TEXT[routeReply.statusCode],
           }),
         );
+        if (middlewarePromise) resolveAction();
         continue;
       }
 
@@ -183,9 +197,11 @@ export class HTTPServer {
             statusText: STATUS_TEXT[routeReply.statusCode],
           }),
         );
+        if (middlewarePromise) resolveAction();
         continue;
       }
       this.handleNotFound(routeRequest, routeReply, requestEvent);
+      if (middlewarePromise) resolveAction();
     }
   }
 

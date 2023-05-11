@@ -3,9 +3,13 @@ import { HTTPServer } from "../mod.ts";
 
 const httpServer = new HTTPServer();
 
-httpServer.middleware((req) => {
+httpServer.middleware(async (req, done) => {
+  const started = Date.now();
   console.log(`${req.method} - ${req.ip()} -  ${req.path}`);
-})
+  await done();
+  const processTime = Date.now() - started;
+  console.log(`Processed in ${processTime}ms`);
+});
 
 httpServer.error((req, _rep) => {
   return JSON.stringify(
