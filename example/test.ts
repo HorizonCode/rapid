@@ -1,5 +1,5 @@
 import { Status } from "https://deno.land/std@0.186.0/http/http_status.ts";
-import { HTTPServer } from "../http_server.ts";
+import { HTTPServer } from "../mod.ts";
 
 const httpServer = new HTTPServer();
 
