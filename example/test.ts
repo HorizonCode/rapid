@@ -1,6 +1,6 @@
 import { Status } from "https://deno.land/std@0.186.0/http/http_status.ts";
 import { hrtime } from "https://deno.land/std@0.177.0/node/process.ts";
-import { round } from "https://deno.land/x/math@v1.1.0/mod.ts";
+import prettyTime from 'npm:pretty-time';
 import { HTTPServer } from "../mod.ts";
 
 const httpServer = new HTTPServer();
@@ -10,7 +10,7 @@ httpServer.middleware(async (req, done) => {
   console.log(`${req.method} - ${req.ip()} -  ${req.path}`);
   await done();
   const processTime = hrtime(started);
-  console.log(`Processed in ${round((processTime[0] * 1000000000 + processTime[1]) / 1000000, 2)}ms`);
+  console.log(`Processed in ${prettyTime(processTime)}`);
 });
 
 httpServer.error((req, _rep) => {
