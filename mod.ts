@@ -18,6 +18,10 @@ type RouteHandler = (
 ) =>
   | Promise<unknown>
   | unknown;
+
+type RouteMiddlewareHandler = (req: RouteRequest) =>
+  | Promise<void>
+  | void;
 export type RouteParam = {
   idx: number;
   paramKey: string;
@@ -29,6 +33,7 @@ export class HTTPServer {
   private staticLocalDir?: string;
   private staticServePath?: string;
   private notFoundHandler?: RouteHandler;
+  private middlewareHandler?: RouteMiddlewareHandler;
 
   async listen(options: ListenOptions) {
     this.server = Deno.listen({
@@ -52,13 +57,58 @@ export class HTTPServer {
     }
   }
 
+  private async handleNotFound(
+    request: RouteRequest,
+    reply: RouteReply,
+    requestEvent: Deno.RequestEvent,
+  ) {
+    if (this.notFoundHandler) {
+      reply.status(Status.NotFound);
+      reply.type("application/json");
+      const notNoundHandle = await this.notFoundHandler(
+        request,
+        reply,
+      );
+      await requestEvent.respondWith(
+        new Response(notNoundHandle as string, {
+          status: reply.statusCode,
+          headers: reply.headers,
+          statusText: STATUS_TEXT[reply.statusCode],
+        }),
+      );
+    } else {
+      await requestEvent.respondWith(
+        new Response(
+          JSON.stringify({
+            code: 404,
+            message: `File ${request.path} not found!`,
+          }),
+          {
+            status: Status.NotFound,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        ),
+      );
+    }
+  }
+
   private async handleHttp(conn: Deno.Conn) {
     const httpConn = Deno.serveHttp(conn);
     for await (const requestEvent of httpConn) {
-      const url = new URL(requestEvent.request.url);
-      const filepath = decodeURIComponent(url.pathname);
       const routeRequest = new RouteRequest(requestEvent.request);
       const routeReply: RouteReply = new RouteReply();
+      const url = new URL(requestEvent.request.url);
+      const filepath = decodeURIComponent(url.pathname);
+      if (filepath.startsWith("/_static")) {
+        this.handleNotFound(routeRequest, routeReply, requestEvent);
+        continue;
+      }
+
+      if (this.middlewareHandler) {
+        this.middlewareHandler(routeRequest);
+      }
 
       if (this.staticServePath && filepath.startsWith(this.staticServePath)) {
         const fileDir = filepath.split("/").slice(2).join("/");
@@ -71,38 +121,7 @@ export class HTTPServer {
         try {
           file = await Deno.open(pathLoc, { read: true });
         } catch {
-          // If the file cannot be opened, return a "404 Not Found" response
-          if (this.notFoundHandler) {
-            routeReply.status(Status.NotFound);
-            routeReply.type("application/json");
-            const notNoundHandle = await this.notFoundHandler(
-              routeRequest,
-              routeReply,
-            );
-            await requestEvent.respondWith(
-              new Response(notNoundHandle as string, {
-                status: routeReply.statusCode,
-                headers: routeReply.headers,
-                statusText: STATUS_TEXT[routeReply.statusCode],
-              }),
-            );
-            continue;
-          } else {
-            await requestEvent.respondWith(
-              new Response(
-                JSON.stringify({
-                  code: 404,
-                  message: `File ${filepath} not found!`,
-                }),
-                {
-                  status: Status.NotFound,
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                },
-              ),
-            );
-          }
+          this.handleNotFound(routeRequest, routeReply, requestEvent);
           continue;
         }
 
@@ -164,39 +183,9 @@ export class HTTPServer {
             statusText: STATUS_TEXT[routeReply.statusCode],
           }),
         );
-
         continue;
       }
-      if (this.notFoundHandler) {
-        routeReply.status(Status.NotFound);
-        routeReply.type("application/json");
-        const notNoundHandle = await this.notFoundHandler(
-          routeRequest,
-          routeReply,
-        );
-        await requestEvent.respondWith(
-          new Response(notNoundHandle as string, {
-            status: routeReply.statusCode,
-            headers: routeReply.headers,
-            statusText: STATUS_TEXT[routeReply.statusCode],
-          }),
-        );
-      } else {
-        await requestEvent.respondWith(
-          new Response(
-            JSON.stringify({
-              code: 404,
-              message: `Route ${routeName} not found!`,
-            }),
-            {
-              status: Status.NotFound,
-              headers: {
-                "Content-Type": "application/json",
-              },
-            },
-          ),
-        );
-      }
+      this.handleNotFound(routeRequest, routeReply, requestEvent);
     }
   }
 
@@ -204,6 +193,10 @@ export class HTTPServer {
     if (this.server) {
       this.server.close();
     }
+  }
+
+  middleware(handler: RouteMiddlewareHandler) {
+    this.middlewareHandler = handler;
   }
 
   error(handler: RouteHandler) {

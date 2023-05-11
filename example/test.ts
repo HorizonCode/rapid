@@ -3,6 +3,10 @@ import { HTTPServer } from "../mod.ts";
 
 const httpServer = new HTTPServer();
 
+httpServer.middleware((req) => {
+  console.log(`User Requested ${req.path}`);
+})
+
 httpServer.error((req, _rep) => {
   return JSON.stringify(
     {
