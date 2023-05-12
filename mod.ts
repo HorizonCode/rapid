@@ -169,14 +169,12 @@ export class HTTPServer {
 
           const readableStream = file.readable;
           const response = new Response(readableStream);
-
           if (middlewarePromise) {
             const pt = performance.now() - perStart;
             const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
             resolveAction(hrArray);
           }
           await requestEvent.respondWith(response);
-          file.close(); // close file after serve
           return;
         }
 
