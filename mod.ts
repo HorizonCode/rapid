@@ -12,7 +12,7 @@ type ListenOptions = {
   staticServePath?: string;
 };
 
-enum HTTPMethod {
+export enum HTTPMethod {
   GET = "GET",
   POST = "POST",
   PUSH = "PUSH",
@@ -289,7 +289,7 @@ export class HTTPServer {
     this.add(HTTPMethod.DELETE, path, handler);
   }
 
-  private add(method: HTTPMethod, path: string, handler: RouteHandler) {
+  add(method: HTTPMethod, path: string, handler: RouteHandler) {
     const route = new Route(path, method, handler);
     if (this.routes.has(route.routeName)) {
       console.log(`${route.routeName} already registered!`);
