@@ -122,6 +122,7 @@ export class HTTPServer {
           conn,
           filepath,
           url,
+          this.staticServePath ?? "",
         );
         const routeReply: RouteReply = new RouteReply();
 
@@ -347,13 +348,23 @@ export class RouteRequest {
   queryParams: { [key: string]: string };
   pathParams: { [key: string]: string };
   remoteIpAddr: string;
+  resourceRequest: boolean;
 
-  constructor(request: Request, conn: Deno.Conn, path: string, url: string) {
+  constructor(
+    request: Request,
+    conn: Deno.Conn,
+    path: string,
+    url: string,
+    staticServePath: string,
+  ) {
     this.url = url;
     this.path = decodeURIComponent(path);
     this.headers = request.headers;
     this.method = request.method as HTTPMethod;
     this.pathParams = {};
+    this.resourceRequest = staticServePath.length > 0
+      ? path.startsWith(staticServePath)
+      : false;
     this.queryParams = Object.fromEntries(new URL(url).searchParams.entries());
     this.remoteIpAddr = "hostname" in conn.remoteAddr
       ? conn.remoteAddr["hostname"]
