@@ -63,9 +63,9 @@ httpServer.get("/site", (_req, rep) => {
     </head>
     <body>
       <h1>Hello World!</h1>
-      <img src="/assets/lucoa.gif" width="150" />
+      <img src="/assets/lucoa.gif" id="lucoa" width="150" />
       <br>
-      <button onclick="alert('bruh')">Useless button, do not press.</button>
+      <button onclick="document.getElementById('lucoa').remove(); alert('omg, you killed her you monster.')">Useless button, do not press.</button>
     </body>
   </html>
   `;
