@@ -102,145 +102,149 @@ export class HTTPServer {
   }
 
   private async handleHttp(conn: Deno.Conn) {
-    const httpConn = Deno.serveHttp(conn);
-    for await (const requestEvent of httpConn) {
-      const filepath = decodeURIComponent(
-        "/" + requestEvent.request.url.split("/").slice(3).join("/"),
-      );
-      const request = requestEvent.request;
-      const url = request.url;
-      const routeRequest = new RouteRequest(
-        request,
-        conn,
-        filepath,
-        url,
-      );
-      const routeReply: RouteReply = new RouteReply();
-
-      if (filepath.startsWith("/_static") || filepath.endsWith(".ico")) {
-        this.handleNotFound(routeRequest, routeReply, requestEvent);
-        continue;
-      }
-
-      this.preprocessors.forEach((preProcessor) =>
-        preProcessor(routeRequest, routeReply)
-      );
-
-      let resolveAction: (value: number[]) => void = () => {};
-      let middlewarePromise;
-      const perStart = performance.now();
-      if (this.middlewareHandler) {
-        middlewarePromise = (): Promise<number[]> => {
-          return new Promise((resolve) => {
-            resolveAction = resolve;
-          });
-        };
-        this.middlewareHandler(routeRequest, routeReply, middlewarePromise);
-      }
-
-      if (this.staticServePath && filepath.startsWith(this.staticServePath)) {
-        const fileDir = filepath.split("/").slice(2).join("/");
-        const pathLoc = path.join(
-          Deno.cwd(),
-          this.staticLocalDir as string,
-          fileDir,
+    try {
+      const httpConn = Deno.serveHttp(conn);
+      for await (const requestEvent of httpConn) {
+        const filepath = decodeURIComponent(
+          "/" + requestEvent.request.url.split("/").slice(3).join("/"),
         );
-        let file;
-        try {
-          file = await Deno.open(pathLoc, { read: true });
-        } catch {
+        const request = requestEvent.request;
+        const url = request.url;
+        const routeRequest = new RouteRequest(
+          request,
+          conn,
+          filepath,
+          url,
+        );
+        const routeReply: RouteReply = new RouteReply();
+
+        if (filepath.startsWith("/_static") || filepath.endsWith(".ico")) {
+          this.handleNotFound(routeRequest, routeReply, requestEvent);
+          continue;
+        }
+
+        this.preprocessors.forEach((preProcessor) =>
+          preProcessor(routeRequest, routeReply)
+        );
+
+        let resolveAction: (value: number[]) => void = () => {};
+        let middlewarePromise;
+        const perStart = performance.now();
+        if (this.middlewareHandler) {
+          middlewarePromise = (): Promise<number[]> => {
+            return new Promise((resolve) => {
+              resolveAction = resolve;
+            });
+          };
+          this.middlewareHandler(routeRequest, routeReply, middlewarePromise);
+        }
+
+        if (this.staticServePath && filepath.startsWith(this.staticServePath)) {
+          const fileDir = filepath.split("/").slice(2).join("/");
+          const pathLoc = path.join(
+            Deno.cwd(),
+            this.staticLocalDir as string,
+            fileDir,
+          );
+          let file;
+          try {
+            file = await Deno.open(pathLoc, { read: true });
+          } catch {
+            if (middlewarePromise) {
+              const pt = performance.now() - perStart;
+              const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
+              resolveAction(hrArray);
+            }
+            this.handleNotFound(routeRequest, routeReply, requestEvent);
+            continue;
+          }
+
+          const readableStream = file.readable;
+          const response = new Response(readableStream);
           if (middlewarePromise) {
             const pt = performance.now() - perStart;
             const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
             resolveAction(hrArray);
           }
-          this.handleNotFound(routeRequest, routeReply, requestEvent);
+          await requestEvent.respondWith(response);
+          return;
+        }
+
+        const routeName = `${requestEvent.request.method}@${filepath}`;
+        let route = this.routes.get(routeName);
+
+        if (route) {
+          let handler = await route.handler(
+            routeRequest,
+            routeReply,
+          ) ?? routeReply.body;
+
+          if (typeof (handler) == "object") {
+            handler = JSON.stringify(handler, null, 2);
+          }
+
+          if (middlewarePromise) {
+            const pt = performance.now() - perStart;
+            const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
+            resolveAction(hrArray);
+          }
+          await requestEvent.respondWith(
+            new Response(handler as string, {
+              status: routeReply.statusCode,
+              headers: routeReply.headers,
+              statusText: STATUS_TEXT[routeReply.statusCode],
+            }),
+          );
           continue;
         }
 
-        const readableStream = file.readable;
-        const response = new Response(readableStream);
+        route = Array.from(this.routes.values()).find((route) =>
+          routeWithParamsRouteMatcher(routeRequest, route)
+        );
+
+        if (route) {
+          const routeParamsMap: RouteParam[] = extractRouteParams(route.path);
+          const routeSegments: string[] = filepath.split("/");
+          routeRequest.pathParams = routeParamsMap.reduce(
+            (accum: { [key: string]: string }, curr: RouteParam) => {
+              return {
+                ...accum,
+                [curr.paramKey]: routeSegments[curr.idx].replace(
+                  /(?!\/)\W\D.*/gm,
+                  "",
+                ),
+              };
+            },
+            {},
+          );
+
+          const handler = await route.handler(
+            routeRequest,
+            routeReply,
+          );
+          if (middlewarePromise) {
+            const pt = performance.now() - perStart;
+            const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
+            resolveAction(hrArray);
+          }
+          await requestEvent.respondWith(
+            new Response(handler as string, {
+              status: routeReply.statusCode,
+              headers: routeReply.headers,
+              statusText: STATUS_TEXT[routeReply.statusCode],
+            }),
+          );
+          continue;
+        }
         if (middlewarePromise) {
           const pt = performance.now() - perStart;
           const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
           resolveAction(hrArray);
         }
-        await requestEvent.respondWith(response);
-        return;
+        this.handleNotFound(routeRequest, routeReply, requestEvent);
       }
-
-      const routeName = `${requestEvent.request.method}@${filepath}`;
-      let route = this.routes.get(routeName);
-
-      if (route) {
-        let handler = await route.handler(
-          routeRequest,
-          routeReply,
-        ) ?? routeReply.body;
-
-        if (typeof (handler) == "object") {
-          handler = JSON.stringify(handler, null, 2);
-        }
-
-        if (middlewarePromise) {
-          const pt = performance.now() - perStart;
-          const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
-          resolveAction(hrArray);
-        }
-        await requestEvent.respondWith(
-          new Response(handler as string, {
-            status: routeReply.statusCode,
-            headers: routeReply.headers,
-            statusText: STATUS_TEXT[routeReply.statusCode],
-          }),
-        );
-        continue;
-      }
-
-      route = Array.from(this.routes.values()).find((route) =>
-        routeWithParamsRouteMatcher(routeRequest, route)
-      );
-
-      if (route) {
-        const routeParamsMap: RouteParam[] = extractRouteParams(route.path);
-        const routeSegments: string[] = filepath.split("/");
-        routeRequest.pathParams = routeParamsMap.reduce(
-          (accum: { [key: string]: string }, curr: RouteParam) => {
-            return {
-              ...accum,
-              [curr.paramKey]: routeSegments[curr.idx].replace(
-                /(?!\/)\W\D.*/gm,
-                "",
-              ),
-            };
-          },
-          {},
-        );
-
-        const handler = await route.handler(
-          routeRequest,
-          routeReply,
-        );
-        if (middlewarePromise) {
-          const pt = performance.now() - perStart;
-          const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
-          resolveAction(hrArray);
-        }
-        await requestEvent.respondWith(
-          new Response(handler as string, {
-            status: routeReply.statusCode,
-            headers: routeReply.headers,
-            statusText: STATUS_TEXT[routeReply.statusCode],
-          }),
-        );
-        continue;
-      }
-      if (middlewarePromise) {
-        const pt = performance.now() - perStart;
-        const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
-        resolveAction(hrArray);
-      }
-      this.handleNotFound(routeRequest, routeReply, requestEvent);
+    } catch (_err) {
+      // Ignore http that where closed before reply was sent
     }
   }
 
