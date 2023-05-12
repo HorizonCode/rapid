@@ -4,7 +4,8 @@ import { HTTPServer } from "../mod.ts";
 
 const httpServer = new HTTPServer();
 
-httpServer.middleware(async (req, done) => {
+httpServer.middleware(async (req, rep, done) => {
+  rep.header("Access-Control-Allow-Origin", "*");
   console.log(`${req.method} - ${req.remoteIpAddr} -  ${req.path}`);
   const processTime = await done();
   console.log(`Processed in ${prettyTime(processTime)}`);
@@ -23,7 +24,7 @@ httpServer.error((req, _rep) => {
   );
 });
 
-httpServer.add("GET", "/", (req, rep) => {
+httpServer.get("/", (req, rep) => {
   rep.status(Status.Teapot)
     .header("working", "true")
     .type("application/json")
@@ -37,7 +38,7 @@ httpServer.add("GET", "/", (req, rep) => {
   };
 });
 
-httpServer.add("GET", "/api/user/:userId", (req, rep) => {
+httpServer.get("/api/user/:userId", (req, rep) => {
   rep.status(Status.Teapot)
     .type("application/json");
 

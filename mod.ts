@@ -21,6 +21,7 @@ type RouteHandler = (
 
 type RouteMiddlewareHandler = (
   req: RouteRequest,
+  rep: RouteReply,
   done: () => Promise<number[]>,
 ) => Promise<void>;
 
@@ -124,7 +125,7 @@ export class HTTPServer {
             resolveAction = resolve;
           });
         };
-        this.middlewareHandler(routeRequest, middlewarePromise);
+        this.middlewareHandler(routeRequest, routeReply, middlewarePromise);
       }
 
       if (this.staticServePath && filepath.startsWith(this.staticServePath)) {
