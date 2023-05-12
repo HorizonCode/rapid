@@ -175,7 +175,7 @@ export class HTTPServer {
             resolveAction(hrArray);
           }
           await requestEvent.respondWith(response);
-          return;
+          continue;
         }
 
         const routeName = `${requestEvent.request.method}@${filepath}`;
@@ -252,6 +252,7 @@ export class HTTPServer {
         this.handleNotFound(routeRequest, routeReply, requestEvent);
       }
     } catch (_err) {
+      console.log(_err);
       // Ignore http connections that where closed before reply was sent
     }
   }
