@@ -11,7 +11,14 @@ type ListenOptions = {
   staticLocalDir?: string;
   staticServePath?: string;
 };
-type HTTPMethod = "GET" | "POST" | "PUSH" | "DELETE";
+
+enum HTTPMethod {
+  GET = "GET",
+  POST = "POST",
+  PUSH = "PUSH",
+  DELETE = "DELETE",
+}
+
 type RouteHandler = (
   req: RouteRequest,
   rep: RouteReply,
@@ -267,22 +274,22 @@ export class HTTPServer {
   }
 
   get(path: string, handler: RouteHandler) {
-    this.add("GET", path, handler);
+    this.add(HTTPMethod.GET, path, handler);
   }
 
   post(path: string, handler: RouteHandler) {
-    this.add("POST", path, handler);
+    this.add(HTTPMethod.POST, path, handler);
   }
 
   push(path: string, handler: RouteHandler) {
-    this.add("PUSH", path, handler);
+    this.add(HTTPMethod.PUSH, path, handler);
   }
 
   delete(path: string, handler: RouteHandler) {
-    this.add("DELETE", path, handler);
+    this.add(HTTPMethod.DELETE, path, handler);
   }
 
-  add(method: HTTPMethod, path: string, handler: RouteHandler) {
+  private add(method: HTTPMethod, path: string, handler: RouteHandler) {
     const route = new Route(path, method, handler);
     if (this.routes.has(route.routeName)) {
       console.log(`${route.routeName} already registered!`);
