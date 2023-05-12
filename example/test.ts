@@ -4,8 +4,11 @@ import { HTTPServer } from "../mod.ts";
 
 const httpServer = new HTTPServer();
 
-httpServer.middleware(async (req, rep, done) => {
+httpServer.preprocessor((_req, rep) => {
   rep.header("Access-Control-Allow-Origin", "*");
+});
+
+httpServer.middleware(async (req, _rep, done) => {
   console.log(`${req.method} - ${req.remoteIpAddr} -  ${req.path}`);
   const processTime = await done();
   console.log(`Processed in ${prettyTime(processTime)}`);

@@ -25,6 +25,11 @@ type RouteMiddlewareHandler = (
   done: () => Promise<number[]>,
 ) => Promise<void>;
 
+type RoutePreprocessor = (
+  req: RouteRequest,
+  rep: RouteReply,
+) => void;
+
 type RouteParam = {
   idx: number;
   paramKey: string;
@@ -36,6 +41,7 @@ export class HTTPServer {
   private staticLocalDir?: string;
   private staticServePath?: string;
   private notFoundHandler?: RouteHandler;
+  private preprocessors: RoutePreprocessor[] = [];
   private middlewareHandler?: RouteMiddlewareHandler;
 
   async listen(options: ListenOptions) {
@@ -115,6 +121,10 @@ export class HTTPServer {
         this.handleNotFound(routeRequest, routeReply, requestEvent);
         continue;
       }
+
+      this.preprocessors.forEach((preProcessor) =>
+        preProcessor(routeRequest, routeReply)
+      );
 
       let resolveAction: (value: number[]) => void = () => {};
       let middlewarePromise;
@@ -198,7 +208,10 @@ export class HTTPServer {
           (accum: { [key: string]: string }, curr: RouteParam) => {
             return {
               ...accum,
-              [curr.paramKey]: routeSegments[curr.idx].replace(/(?!\/)\W\D.*/gm, ""),
+              [curr.paramKey]: routeSegments[curr.idx].replace(
+                /(?!\/)\W\D.*/gm,
+                "",
+              ),
             };
           },
           {},
@@ -235,6 +248,10 @@ export class HTTPServer {
     if (this.server) {
       this.server.close();
     }
+  }
+
+  preprocessor(handler: RoutePreprocessor) {
+    this.preprocessors.push(handler);
   }
 
   middleware(handler: RouteMiddlewareHandler) {
