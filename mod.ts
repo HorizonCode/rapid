@@ -244,7 +244,7 @@ export class HTTPServer {
         this.handleNotFound(routeRequest, routeReply, requestEvent);
       }
     } catch (_err) {
-      // Ignore http that where closed before reply was sent
+      // Ignore http connections that where closed before reply was sent
     }
   }
 
