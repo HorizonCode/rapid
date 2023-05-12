@@ -17,6 +17,13 @@ const JOKES = [
 
 const httpServer = new HTTPServer();
 
+// Add as many preprocessors as you want
+httpServer.preprocessor((req, _rep) => {
+  if (req.resourceRequest) {
+    console.log(`Requested resource ${req.path}`);
+  }
+});
+
 httpServer.preprocessor((_req, rep) => {
   rep.header("Access-Control-Allow-Origin", "*");
 });
