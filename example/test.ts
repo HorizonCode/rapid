@@ -23,7 +23,7 @@ httpServer.preprocessor((_req, rep) => {
 
 httpServer.middleware(async (req, _rep, done) => {
   const processTime = await done();
-  console.log(`${req.method} - ${req.remoteIpAddr} -  ${req.path} - ${prettyTime(processTime)}`);
+  console.log(`${req.method} - ${req.remoteIpAddr} - ${req.path} - ${prettyTime(processTime)}`);
 });
 
 httpServer.error((req, _rep) => {
