@@ -198,7 +198,7 @@ export class HTTPServer {
           (accum: { [key: string]: string }, curr: RouteParam) => {
             return {
               ...accum,
-              [curr.paramKey]: routeSegments[curr.idx],
+              [curr.paramKey]: routeSegments[curr.idx].replace(/(?!\/)\W\D.*/gm, ""),
             };
           },
           {},
