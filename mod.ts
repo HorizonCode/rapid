@@ -44,9 +44,7 @@ export class HTTPServer {
     });
 
     console.log(
-      `Listening on ${
-        options.host ? options.host : "http://localhost"
-      }:${options.port} !`,
+      `Listening on ${options.host ?? "http://localhost"}:${options.port} !`,
     );
 
     if (options.staticLocalDir && options.staticServePath) {
