@@ -4,6 +4,7 @@ import {
 } from "https://deno.land/std@0.186.0/http/http_status.ts";
 import * as path from "https://deno.land/std@0.185.0/path/mod.ts";
 import * as cookie from "https://deno.land/std@0.185.0/http/cookie.ts";
+import prettyTime from "npm:pretty-time";
 
 type ListenOptions = {
   port: number;
@@ -21,7 +22,7 @@ type RouteHandler = (
 
 type RouteMiddlewareHandler = (
   req: RouteRequest,
-  done: () => Promise<unknown>,
+  done: () => Promise<number[]>,
 ) => Promise<void>;
 
 type RouteParam = {
@@ -102,24 +103,26 @@ export class HTTPServer {
       const filepath = decodeURIComponent(
         "/" + requestEvent.request.url.split("/").slice(3).join("/"),
       );
+      const request = requestEvent.request;
+      const url = request.url;
       const routeRequest = new RouteRequest(
-        requestEvent.request,
+        request,
         conn,
         filepath,
-        requestEvent.request.url,
+        url,
       );
       const routeReply: RouteReply = new RouteReply();
 
-      if (filepath.startsWith("/_static")) {
+      if (filepath.startsWith("/_static") || filepath.endsWith(".ico")) {
         this.handleNotFound(routeRequest, routeReply, requestEvent);
         continue;
       }
 
-      let resolveAction: (value?: unknown) => void = () => {};
+      let resolveAction: (value: number[]) => void = () => {};
       let middlewarePromise;
-
+      const perStart = performance.now();
       if (this.middlewareHandler) {
-        middlewarePromise = (): Promise<unknown> => {
+        middlewarePromise = (): Promise<number[]> => {
           return new Promise((resolve) => {
             resolveAction = resolve;
           });
@@ -138,14 +141,22 @@ export class HTTPServer {
         try {
           file = await Deno.open(pathLoc, { read: true });
         } catch {
-          if (middlewarePromise) resolveAction();
+          if (middlewarePromise) {
+            const pt = performance.now() - perStart;
+            const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
+            resolveAction(hrArray);
+          }
           this.handleNotFound(routeRequest, routeReply, requestEvent);
           continue;
         }
 
         const readableStream = file.readable;
         const response = new Response(readableStream);
-        if (middlewarePromise) resolveAction();
+        if (middlewarePromise) {
+          const pt = performance.now() - perStart;
+          const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
+          resolveAction(hrArray);
+        }
         await requestEvent.respondWith(response);
         return;
       }
@@ -163,7 +174,11 @@ export class HTTPServer {
           handler = JSON.stringify(handler, null, 2);
         }
 
-        if (middlewarePromise) resolveAction();
+        if (middlewarePromise) {
+          const pt = performance.now() - perStart;
+          const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
+          resolveAction(hrArray);
+        }
         await requestEvent.respondWith(
           new Response(handler as string, {
             status: routeReply.statusCode,
@@ -195,7 +210,11 @@ export class HTTPServer {
           routeRequest,
           routeReply,
         );
-        if (middlewarePromise) resolveAction();
+        if (middlewarePromise) {
+          const pt = performance.now() - perStart;
+          const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
+          resolveAction(hrArray);
+        }
         await requestEvent.respondWith(
           new Response(handler as string, {
             status: routeReply.statusCode,
@@ -205,7 +224,11 @@ export class HTTPServer {
         );
         continue;
       }
-      if (middlewarePromise) resolveAction();
+      if (middlewarePromise) {
+        const pt = performance.now() - perStart;
+        const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
+        resolveAction(hrArray);
+      }
       this.handleNotFound(routeRequest, routeReply, requestEvent);
     }
   }
@@ -297,7 +320,7 @@ export class RouteRequest {
   method: HTTPMethod;
   queryParams: { [key: string]: string };
   pathParams: { [key: string]: string };
-  private remoteIpAddr: string;
+  remoteIpAddr: string;
 
   constructor(request: Request, conn: Deno.Conn, path: string, url: string) {
     this.url = url;
@@ -311,25 +334,10 @@ export class RouteRequest {
       : "127.0.0.1";
   }
 
-  private paramsToObject(entries: IterableIterator<[string, string]>) {
-    const result: { [key: string]: string } = {};
-    for (const [key, value] of entries) {
-      result[key] = value;
-    }
-    return result;
-  }
-
-  ip() {
-    const cfConnectingIp: string = this.header("cf-connecting-ip") as string;
-    if (cfConnectingIp && cfConnectingIp.length > 0) return cfConnectingIp;
-
-    const xRealIp: string = this.header("x-real-ip") as string;
-    if (xRealIp && xRealIp.length > 0) xRealIp;
-
-    const xForwardedFor: string = this.header("x-forwarded-For") as string;
-    if (xForwardedFor && xForwardedFor.length > 0) return xForwardedFor;
-
-    return this.remoteIpAddr;
+  private paramsToObject(
+    entries: IterableIterator<[string, string]>,
+  ): { [key: string]: string } {
+    return Object.fromEntries(entries);
   }
 
   header(name: string): unknown {

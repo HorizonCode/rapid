@@ -5,12 +5,9 @@ import { HTTPServer } from "../mod.ts";
 const httpServer = new HTTPServer();
 
 httpServer.middleware(async (req, done) => {
-  const perStart = performance.now();
-  console.log(`${req.method} - ${req.ip()} -  ${req.path}`);
-  await done();
-  const pt = performance.now() - perStart;
-  const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
-  console.log(`Processed in ${prettyTime(hrArray)}`);
+  console.log(`${req.method} - ${req.remoteIpAddr} -  ${req.path}`);
+  const processTime = await done();
+  console.log(`Processed in ${prettyTime(processTime)}`);
 });
 
 httpServer.error((req, _rep) => {
