@@ -2,6 +2,19 @@ import { Status } from "https://deno.land/std@0.186.0/http/http_status.ts";
 import prettyTime from "npm:pretty-time";
 import { HTTPServer } from "../mod.ts";
 
+const JOKES = [
+  "Why do Java developers often wear glasses? They can't C#.",
+  "A SQL query walks into a bar, goes up to two tables and says “can I join you?”",
+  "Wasn't hard to crack Forrest Gump's password. 1forrest1.",
+  "I love pressing the F5 key. It's refreshing.",
+  "Called IT support and a chap from Australia came to fix my network connection.  I asked “Do you come from a LAN down under?”",
+  "There are 10 types of people in the world. Those who understand binary and those who don't.",
+  "Why are assembly programmers often wet? They work below C level.",
+  "My favourite computer based band is the Black IPs.",
+  "What programme do you use to predict the music tastes of former US presidential candidates? An Al Gore Rhythm.",
+  "An SEO expert walked into a bar, pub, inn, tavern, hostelry, public house.",
+];
+
 const httpServer = new HTTPServer();
 
 httpServer.preprocessor((_req, rep) => {
@@ -25,6 +38,30 @@ httpServer.error((req, _rep) => {
     null,
     2,
   );
+});
+
+httpServer.get("/api/joke", (_req, rep) => {
+  const randomIndex = Math.floor(Math.random() * JOKES.length);
+  const joke = JOKES[randomIndex];
+  rep.json({
+    code: 200,
+    joke,
+  });
+});
+
+httpServer.get("/site", (_req, rep) => {
+  const htmlTest = `
+  <html>
+    <head>
+      <title>HTML Test</title>
+    </head>
+    <body>
+      <h1>Hello World!</h1>
+      <button onclick="alert('bruh')">Useless button, do not press.</button>
+    </body>
+  </html>
+  `;
+  rep.html(htmlTest);
 });
 
 httpServer.get("/", (req, rep) => {

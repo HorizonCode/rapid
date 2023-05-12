@@ -176,7 +176,7 @@ export class HTTPServer {
         let handler = await route.handler(
           routeRequest,
           routeReply,
-        );
+        ) ?? routeReply.body;
 
         if (typeof (handler) == "object") {
           handler = JSON.stringify(handler, null, 2);
@@ -374,6 +374,17 @@ export class RouteRequest {
 export class RouteReply {
   headers: Headers = new Headers();
   statusCode: Status = Status.OK;
+  body: unknown;
+
+  json(json: JSON | { [key: string]: unknown } | []) {
+    this.type("application/json");
+    this.body = JSON.stringify(json, null, 2);
+  }
+
+  html(html: string) {
+    this.type("text/html");
+    this.body = html;
+  }
 
   header(name: string, value: string): RouteReply {
     this.headers.set(name, value);
