@@ -53,6 +53,7 @@ httpServer.get("/site", (_req, rep) => {
   <html>
     <head>
       <title>HTML Test</title>
+      <link rel="stylesheet" type="text/css" href="/assets/style.css">
     </head>
     <body>
       <h1>Hello World!</h1>
