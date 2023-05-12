@@ -328,16 +328,10 @@ export class RouteRequest {
     this.headers = request.headers;
     this.method = request.method as HTTPMethod;
     this.pathParams = {};
-    this.queryParams = this.paramsToObject(new URL(url).searchParams.entries());
+    this.queryParams = Object.fromEntries(new URL(url).searchParams.entries());
     this.remoteIpAddr = "hostname" in conn.remoteAddr
       ? conn.remoteAddr["hostname"]
       : "127.0.0.1";
-  }
-
-  private paramsToObject(
-    entries: IterableIterator<[string, string]>,
-  ): { [key: string]: string } {
-    return Object.fromEntries(entries);
   }
 
   header(name: string): unknown {
