@@ -13,4 +13,5 @@ await server.listen({
   port: 8000,
 });
 ```
+See `examples/test.ts` for more examples
 

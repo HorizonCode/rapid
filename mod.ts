@@ -301,7 +301,7 @@ export class HTTPServer {
   }
 }
 
-export const routeWithParamsRouteMatcher = (
+const routeWithParamsRouteMatcher = (
   req: RouteRequest,
   route: Route,
 ): boolean => {
@@ -313,10 +313,10 @@ export const routeWithParamsRouteMatcher = (
   );
 };
 
-export const routeParamPattern: (route: string) => string = (route) =>
+const routeParamPattern: (route: string) => string = (route) =>
   route.replace(/\/\:[^/]{1,}/gi, "/[^/]{1,}").replace(/\//g, "\\/");
 
-export const extractRouteParams: (route: string) => RouteParam[] = (route) =>
+const extractRouteParams: (route: string) => RouteParam[] = (route) =>
   route.split("/").reduce((accum: RouteParam[], curr: string, idx: number) => {
     if (/:[A-Za-z1-9]{1,}/.test(curr)) {
       const paramKey: string = curr.replace(":", "");
