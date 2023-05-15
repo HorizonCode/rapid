@@ -95,7 +95,7 @@ export class HTTPServer {
         new Response(
           JSON.stringify({
             code: 404,
-            message: `File ${request.path} not found!`,
+            message: `Path ${request.path} not found!`,
           }),
           {
             status: Status.NotFound,
