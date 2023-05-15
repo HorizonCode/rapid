@@ -1,1 +1,2 @@
-A minimal router manager using the native Deno http service
+# rapid
+Streamlined Deno-powered HTTP framework for lightning-fast web development.
