@@ -1,6 +1,6 @@
 import { Status } from "https://deno.land/std@0.186.0/http/http_status.ts";
 import prettyTime from "npm:pretty-time";
-import { HTTPServer } from "../mod.ts";
+import { HTTPServer, SessionExpire } from "../mod.ts";
 
 const JOKES = [
   "Why do Java developers often wear glasses? They can't C#.",
@@ -29,11 +29,12 @@ httpServer.preprocessor((_req, rep) => {
 });
 
 httpServer.middleware(async (req, _rep, done) => {
-  const processTime = await done();
+  const result = await done();
+  const hrArray: number[] = [0, Math.trunc(result.processTime * 1000000)];
   if (!req.resourceRequest) {
     console.log(
       `${req.method} - ${req.remoteIpAddr} - ${req.path} - ${
-        prettyTime(processTime)
+        prettyTime(hrArray)
       }`,
     );
   }
@@ -79,6 +80,85 @@ httpServer.get("/site", (_req, rep) => {
   rep.html(htmlTest);
 });
 
+httpServer.delete("/session", (req, _rep) => {
+  const username = req.session.user as string ?? "";
+  if (username.length > 0) {
+    req.sessionDestroy();
+    return {
+      code: 200,
+      message: "Logged out!",
+    };
+  } else {
+    return {
+      code: 403,
+      message: "Not logged in!",
+    };
+  }
+});
+
+httpServer.post("/session", (req, _rep) => {
+  const username = req.queryParam("username") ?? "";
+  if (username.length > 0) {
+    req.session.user = username;
+    return {
+      code: 200,
+      message: "Logged in!",
+    };
+  } else {
+    return {
+      code: 403,
+      message: "Please enter a Username",
+    };
+  }
+});
+
+httpServer.get("/session", (req, rep) => {
+  const headerText = req.session.user
+    ? `Hello, ${req.session.user}!`
+    : `Please login!`;
+  const htmlTest = `
+  <html>
+    <head>
+      <title>Session Example</title>
+    </head>
+    <body>
+      <h1>${headerText}</h1>
+      <input type="text" placeholder="Username" id="username" style="margin-bottom: 15px;"  ${req.session.user ? "value='" + req.session.user + "' disabled" : ""}/>
+      <br>
+      <button onclick="${req.session.user ? "doLogout" : "doLogin"}()">${
+    req.session.user ? "Logout" : "Login"
+  }</button>
+    </body>
+    <script type="">
+      async function doLogout() {
+        const fetchResult = await fetch("/session", { method: 'DELETE'});
+        const jsonResult = await fetchResult.json();
+        if("code" in jsonResult){
+          if(jsonResult.code == 200){
+            document.location.reload(true)
+          }else{
+            alert(jsonResult.message);
+          }
+        }
+      }
+      async function doLogin() {
+        const username = document.getElementById('username').value;
+        const fetchResult = await fetch("/session?username=" + username, { method: 'POST'});
+        const jsonResult = await fetchResult.json();
+        if("code" in jsonResult){
+          if(jsonResult.code == 200){
+            document.location.reload(true)
+          }else{
+            alert(jsonResult.message);
+          }
+        }
+      }
+    </script>
+  </html>
+  `;
+  rep.html(htmlTest);
+});
+
 httpServer.get("/", (req, rep) => {
   rep.status(Status.Teapot)
     .header("working", "true")
@@ -114,4 +194,6 @@ httpServer.listen({
   port: 8080,
   staticLocalDir: "/static",
   staticServePath: "/assets",
+  sessionSecret: "SuperDuperSecret",
+  sessionExpire: SessionExpire.NEVER
 });
