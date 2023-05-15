@@ -3,7 +3,7 @@ Streamlined Deno-powered HTTP framework for lightning-fast web development.
 
 ## How to use
 ```ts
-import { HTTPServer } from "https://deno.land/x/rapid@v0.1.0/mod.ts";
+import { HTTPServer } from "https://deno.land/x/rapid@v0.1.2/mod.ts";
 
 const server = new HTTPServer();
 
