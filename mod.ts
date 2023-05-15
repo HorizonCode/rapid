@@ -4,13 +4,29 @@ import {
 } from "https://deno.land/std@0.186.0/http/http_status.ts";
 import * as path from "https://deno.land/std@0.185.0/path/mod.ts";
 import * as cookie from "https://deno.land/std@0.185.0/http/cookie.ts";
+import { Aes } from "https://deno.land/x/crypto@v0.10.0/aes.ts";
+import {
+  Cbc,
+  Padding,
+} from "https://deno.land/x/crypto@v0.10.0/block-modes.ts";
+import { cryptoRandomString } from "https://deno.land/x/crypto_random_string@1.0.0/mod.ts";
 
-type ListenOptions = {
+type HTTPServerOptions = {
   port: number;
   host?: string;
   staticLocalDir?: string;
   staticServePath?: string;
+  sessionSecret?: string;
+  sessionExpire?: SessionExpire | number;
 };
+
+type MiddlewareResult = {
+  processTime: number;
+};
+
+export enum SessionExpire {
+  NEVER = 2147483647,
+}
 
 export enum HTTPMethod {
   GET = "GET",
@@ -29,7 +45,7 @@ type RouteHandler = (
 type RouteMiddlewareHandler = (
   req: RouteRequest,
   rep: RouteReply,
-  done: () => Promise<number[]>,
+  done: () => Promise<MiddlewareResult>,
 ) => Promise<void>;
 
 type RoutePreprocessor = (
@@ -50,8 +66,19 @@ export class HTTPServer {
   private notFoundHandler?: RouteHandler;
   private preprocessors: RoutePreprocessor[] = [];
   private middlewareHandler?: RouteMiddlewareHandler;
+  settings?: HTTPServerOptions;
 
-  async listen(options: ListenOptions) {
+  async listen(options: HTTPServerOptions) {
+    if (options.sessionSecret) {
+      if (![16, 24, 32].includes(options.sessionSecret.length)) {
+        const randomString = cryptoRandomString({ length: 32 });
+        throw new Error(
+          "\nInvalid key size (must be either 16, 24 or 32 bytes)\nHere is a pregenerated key: " +
+            randomString,
+        );
+      }
+    }
+    this.settings = options;
     this.server = Deno.listen({
       port: options.port,
       hostname: options.host,
@@ -118,11 +145,11 @@ export class HTTPServer {
         const request = requestEvent.request;
         const url = request.url;
         const routeRequest = new RouteRequest(
+          this,
           request,
           conn,
           filepath,
           url,
-          this.staticServePath ?? "",
         );
         const routeReply: RouteReply = new RouteReply();
 
@@ -135,11 +162,11 @@ export class HTTPServer {
           preProcessor(routeRequest, routeReply)
         );
 
-        let resolveAction: (value: number[]) => void = () => {};
+        let resolveAction: (value: MiddlewareResult) => void = () => {};
         let middlewarePromise;
         const perStart = performance.now();
         if (this.middlewareHandler) {
-          middlewarePromise = (): Promise<number[]> => {
+          middlewarePromise = (): Promise<MiddlewareResult> => {
             return new Promise((resolve) => {
               resolveAction = resolve;
             });
@@ -160,9 +187,11 @@ export class HTTPServer {
           } catch {
             if (middlewarePromise) {
               const pt = performance.now() - perStart;
-              const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
-              resolveAction(hrArray);
+              resolveAction({
+                processTime: pt,
+              });
             }
+            this.processSession(routeRequest, routeReply);
             this.handleNotFound(routeRequest, routeReply, requestEvent);
             continue;
           }
@@ -171,14 +200,18 @@ export class HTTPServer {
           const response = new Response(readableStream);
           if (middlewarePromise) {
             const pt = performance.now() - perStart;
-            const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
-            resolveAction(hrArray);
+            resolveAction({
+              processTime: pt,
+            });
           }
+          this.processSession(routeRequest, routeReply);
           await requestEvent.respondWith(response);
           continue;
         }
 
-        const routeName = `${requestEvent.request.method}@${filepath}`;
+        const routeName = `${requestEvent.request.method}@${
+          filepath.replace(/(?!\/)\W\D.*/gm, "")
+        }`;
         let route = this.routes.get(routeName);
 
         if (route) {
@@ -193,9 +226,11 @@ export class HTTPServer {
 
           if (middlewarePromise) {
             const pt = performance.now() - perStart;
-            const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
-            resolveAction(hrArray);
+            resolveAction({
+              processTime: pt,
+            });
           }
+          this.processSession(routeRequest, routeReply);
           await requestEvent.respondWith(
             new Response(handler as string, {
               status: routeReply.statusCode,
@@ -232,9 +267,12 @@ export class HTTPServer {
           );
           if (middlewarePromise) {
             const pt = performance.now() - perStart;
-            const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
-            resolveAction(hrArray);
+            resolveAction({
+              processTime: pt,
+            });
           }
+
+          this.processSession(routeRequest, routeReply);
           await requestEvent.respondWith(
             new Response(handler as string, {
               status: routeReply.statusCode,
@@ -246,13 +284,34 @@ export class HTTPServer {
         }
         if (middlewarePromise) {
           const pt = performance.now() - perStart;
-          const hrArray: number[] = [0, Math.trunc(pt * 1000000)];
-          resolveAction(hrArray);
+          resolveAction({
+            processTime: pt,
+          });
         }
+        this.processSession(routeRequest, routeReply);
         this.handleNotFound(routeRequest, routeReply, requestEvent);
       }
     } catch (_err) {
       // Ignore http connections that where closed before reply was sent
+    }
+  }
+
+  private processSession(routeRequest: RouteRequest, routeReply: RouteReply) {
+    if (this.settings?.sessionSecret) {
+      const sessionObject = JSON.stringify(routeRequest.session);
+      if (Object.keys(routeRequest.session).length > 0) {
+        const encodedSession = encryptData(
+          sessionObject,
+          this.settings?.sessionSecret,
+        );
+        routeReply.cookie("session", encodedSession, {
+          maxAge: this.settings.sessionExpire ?? undefined,
+        });
+      } else {
+        if (routeRequest.cookie("session")) {
+          routeReply.cookie("session", undefined);
+        }
+      }
     }
   }
 
@@ -326,6 +385,34 @@ const extractRouteParams: (route: string) => RouteParam[] = (route) =>
     return accum;
   }, []);
 
+function encryptData(data: string, key: string) {
+  const te = new TextEncoder();
+  const aeskey = te.encode(key);
+  const encodeddata = te.encode(data);
+  const iv = new Uint8Array(16);
+  const cipher = new Cbc(Aes, aeskey, iv, Padding.PKCS7);
+  const encrypted = cipher.encrypt(encodeddata);
+  const hexed = Array.from(encrypted).map((b) =>
+    b.toString(16).padStart(2, "0")
+  ).join("");
+  return hexed;
+}
+
+function decryptHex(data: string, key: string) {
+  const te = new TextEncoder();
+  const td = new TextDecoder();
+  const byteArray = new Uint8Array(data.length / 2);
+  for (let i = 0; i < data.length; i += 2) {
+    const byte = parseInt(data.substring(i, i + 2), 16);
+    byteArray[Math.floor(i / 2)] = byte;
+  }
+  const aeskey = te.encode(key);
+  const iv = new Uint8Array(16);
+  const decipher = new Cbc(Aes, aeskey, iv, Padding.PKCS7);
+  const decrypted = decipher.decrypt(byteArray);
+  return td.decode(decrypted);
+}
+
 export class Route {
   routeName: string;
   path: string;
@@ -344,31 +431,53 @@ export class RouteRequest {
   url: string;
   path: string;
   headers: Headers;
+  cookies: Record<string, string>;
   method: HTTPMethod;
   queryParams: { [key: string]: string };
   pathParams: { [key: string]: string };
   remoteIpAddr: string;
   resourceRequest: boolean;
+  session: { [key: string]: unknown } = {};
 
   constructor(
+    httpServer: HTTPServer,
     request: Request,
     conn: Deno.Conn,
     path: string,
     url: string,
-    staticServePath: string,
   ) {
     this.url = url;
     this.path = decodeURIComponent(path);
     this.headers = request.headers;
     this.method = request.method as HTTPMethod;
     this.pathParams = {};
-    this.resourceRequest = staticServePath.length > 0
-      ? path.startsWith(staticServePath)
+    this.resourceRequest = httpServer.settings?.staticServePath &&
+        httpServer.settings?.staticServePath.length > 0
+      ? path.startsWith(httpServer.settings?.staticServePath)
       : false;
     this.queryParams = Object.fromEntries(new URL(url).searchParams.entries());
+    this.cookies = cookie.getCookies(this.headers);
     this.remoteIpAddr = "hostname" in conn.remoteAddr
       ? conn.remoteAddr["hostname"]
       : "127.0.0.1";
+
+    const sessionCookie = this.cookie("session") as string;
+    if (sessionCookie && httpServer.settings?.sessionSecret) {
+      const decodedSessionCookie = decryptHex(
+        sessionCookie,
+        httpServer.settings.sessionSecret,
+      );
+      try {
+        this.session = JSON.parse(decodedSessionCookie);
+      } catch (_err) {
+        console.log(_err);
+        // Ignore if sessionCookie is not in JSON format
+      }
+    }
+  }
+
+  sessionDestroy(): void {
+    this.session = {};
   }
 
   header(name: string): unknown {
@@ -379,9 +488,8 @@ export class RouteRequest {
   }
 
   cookie(name: string): unknown {
-    const allCookies = cookie.getCookies(this.headers);
-    const allCookieNames = Object.keys(allCookies);
-    return allCookieNames.includes(name) ? allCookies[name] : undefined;
+    const allCookieNames = Object.keys(this.cookies);
+    return allCookieNames.includes(name) ? this.cookies[name] : undefined;
   }
 
   pathParam(name: string): string {
@@ -423,7 +531,7 @@ export class RouteReply {
     return this;
   }
 
-  cookie(name: string, value: string, attributes?: {
+  cookie(name: string, value: string | undefined, attributes?: {
     expires?: Date | number;
     maxAge?: number;
     domain?: string;
