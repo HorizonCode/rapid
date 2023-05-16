@@ -2,8 +2,8 @@ import {
   Status,
   STATUS_TEXT,
 } from "https://deno.land/std@0.186.0/http/http_status.ts";
-import * as path from "https://deno.land/std@0.185.0/path/mod.ts";
-import * as cookie from "https://deno.land/std@0.185.0/http/cookie.ts";
+import * as path from "https://deno.land/std@0.186.0/path/mod.ts";
+import * as cookie from "https://deno.land/std@0.186.0/http/cookie.ts";
 import { Aes } from "https://deno.land/x/crypto@v0.10.0/aes.ts";
 import {
   Cbc,
