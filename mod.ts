@@ -67,6 +67,12 @@ export class HTTPServer {
   private preprocessors: RoutePreprocessor[] = [];
   private middlewareHandler?: RouteMiddlewareHandler;
   settings?: HTTPServerOptions;
+  private logging = true;
+
+  constructor(logging?: boolean) {
+    if (logging === undefined) this.logging = true;
+    else this.logging = logging;
+  }
 
   async listen(options: HTTPServerOptions) {
     if (options.sessionSecret) {
@@ -74,7 +80,7 @@ export class HTTPServer {
         const randomString = cryptoRandomString({ length: 32 });
         throw new Error(
           "\nInvalid key size (must be either 16, 24 or 32 bytes)\nHere is a pregenerated key: " +
-            randomString,
+          randomString,
         );
       }
     }
@@ -83,10 +89,10 @@ export class HTTPServer {
       port: options.port,
       hostname: options.host,
     });
-
-    console.log(
-      `Listening on ${options.host ?? "http://localhost"}:${options.port} !`,
-    );
+    if (this.logging)
+      console.log(
+        `Listening on ${options.host ?? "http://localhost"}:${options.port} !`,
+      );
 
     if (options.staticLocalDir && options.staticServePath) {
       this.staticLocalDir = options.staticLocalDir;
@@ -162,7 +168,7 @@ export class HTTPServer {
           preProcessor(routeRequest, routeReply)
         );
 
-        let resolveAction: (value: MiddlewareResult) => void = () => {};
+        let resolveAction: (value: MiddlewareResult) => void = () => { };
         let middlewarePromise;
         const perStart = performance.now();
         if (this.middlewareHandler) {
@@ -209,9 +215,8 @@ export class HTTPServer {
           continue;
         }
 
-        const routeName = `${requestEvent.request.method}@${
-          filepath.replace(/(?!\/)\W\D.*/gm, "")
-        }`;
+        const routeName = `${requestEvent.request.method}@${filepath.replace(/(?!\/)\W\D.*/gm, "")
+          }`;
         let route = this.routes.get(routeName);
 
         if (route) {
@@ -356,7 +361,8 @@ export class HTTPServer {
       return;
     }
     this.routes.set(route.routeName, route);
-    console.log(`${route.routeName} added`);
+    if (this.logging)
+      console.log(`${route.routeName} added`);
   }
 }
 
@@ -452,7 +458,7 @@ export class RouteRequest {
     this.method = request.method as HTTPMethod;
     this.pathParams = {};
     this.resourceRequest = httpServer.settings?.staticServePath &&
-        httpServer.settings?.staticServePath.length > 0
+      httpServer.settings?.staticServePath.length > 0
       ? path.startsWith(httpServer.settings?.staticServePath)
       : false;
     this.queryParams = Object.fromEntries(new URL(url).searchParams.entries());
