@@ -91,7 +91,7 @@ export class HTTPServer {
     });
     if (this.logging)
       console.log(
-        `Listening on ${options.host ?? "http://localhost"}:${options.port} !`,
+        `Listening on http://${options.host ?? "localhost"}:${options.port} !`,
       );
 
     if (options.staticLocalDir && options.staticServePath) {
