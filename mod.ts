@@ -150,12 +150,13 @@ export class HTTPServer {
         );
         const request = requestEvent.request;
         const url = request.url;
+
         const routeRequest = new RouteRequest(
           this,
           request,
           conn,
           filepath,
-          url,
+          url
         );
         const routeReply: RouteReply = new RouteReply();
 
@@ -434,6 +435,7 @@ export class Route {
 }
 
 export class RouteRequest {
+  #request: Request;
   url: string;
   path: string;
   headers: Headers;
@@ -452,6 +454,7 @@ export class RouteRequest {
     path: string,
     url: string,
   ) {
+    this.#request = request;
     this.url = url;
     this.path = decodeURIComponent(path);
     this.headers = request.headers;
@@ -504,6 +507,22 @@ export class RouteRequest {
 
   queryParam(name: string): string {
     return this.queryParams[name];
+  }
+
+  json() {
+    return this.#request.json();
+  }
+
+  blob() {
+    return this.#request.blob();
+  }
+
+  formData() {
+    return this.#request.formData()
+  }
+
+  arrayBuffer() {
+    return this.#request.arrayBuffer();
   }
 }
 

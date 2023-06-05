@@ -1,6 +1,7 @@
 import { Status } from "https://deno.land/std@0.186.0/http/http_status.ts";
 import prettyTime from "npm:pretty-time";
 import { HTTPServer, SessionExpire } from "../mod.ts";
+import * as io from "https://deno.land/std@0.190.0/io/mod.ts";
 
 const JOKES = [
   "Why do Java developers often wear glasses? They can't C#.",
@@ -33,8 +34,7 @@ httpServer.middleware(async (req, _rep, done) => {
   const hrArray: number[] = [0, Math.trunc(result.processTime * 1000000)];
   if (!req.resourceRequest) {
     console.log(
-      `${req.method} - ${req.remoteIpAddr} - ${req.path} - ${
-        prettyTime(hrArray)
+      `${req.method} - ${req.remoteIpAddr} - ${req.path} - ${prettyTime(hrArray)
       }`,
     );
   }
@@ -52,6 +52,14 @@ httpServer.error((req, _rep) => {
     2,
   );
 });
+
+httpServer.post("/upload", async (req, _rep) => {
+  const bodyStream = await req.blob();
+  if (bodyStream) {
+    await Deno.writeFile("test.png", bodyStream.stream())
+  }
+  return "test";
+})
 
 httpServer.get("/api/joke", (_req, rep) => {
   const randomIndex = Math.floor(Math.random() * JOKES.length);
@@ -125,9 +133,8 @@ httpServer.get("/session", (req, rep) => {
       <h1>${headerText}</h1>
       <input type="text" placeholder="Username" id="username" style="margin-bottom: 15px;"  ${req.session.user ? "value='" + req.session.user + "' disabled" : ""}/>
       <br>
-      <button onclick="${req.session.user ? "doLogout" : "doLogin"}()">${
-    req.session.user ? "Logout" : "Login"
-  }</button>
+      <button onclick="${req.session.user ? "doLogout" : "doLogin"}()">${req.session.user ? "Logout" : "Login"
+    }</button>
     </body>
     <script type="">
       async function doLogout() {
