@@ -1,7 +1,6 @@
 import { Status } from "https://deno.land/std@0.186.0/http/http_status.ts";
 import prettyTime from "npm:pretty-time";
 import { HTTPServer, SessionExpire } from "../mod.ts";
-import * as io from "https://deno.land/std@0.190.0/io/mod.ts";
 
 const JOKES = [
   "Why do Java developers often wear glasses? They can't C#.",
