@@ -12,8 +12,9 @@ import {
 import { cryptoRandomString } from "https://deno.land/x/crypto_random_string@1.0.0/mod.ts";
 
 type HTTPServerOptions = {
-  port: number;
+  port?: number;
   host?: string;
+  unixPath?: string;
   staticLocalDir?: string;
   staticServePath?: string;
   sessionSecret?: string;
@@ -85,14 +86,30 @@ export class HTTPServer {
       }
     }
     this.settings = options;
-    this.server = Deno.listen({
-      port: options.port,
-      hostname: options.host,
-    });
-    if (this.logging)
-      console.log(
-        `Listening on http://${options.host ?? "localhost"}:${options.port} !`,
-      );
+    if (options.unixPath) {
+      this.server = Deno.listen({
+        transport: "unix",
+        path: options.unixPath
+      });
+      if (this.logging)
+        console.log(
+          `Listening on unix path ${options.unixPath} !`,
+        );
+    } else {
+      if (!options.port) {
+        console.log("please set a port.");
+        return;
+      }
+      this.server = Deno.listen({
+        port: options.port,
+        hostname: options.host,
+      });
+      if (this.logging)
+        console.log(
+          `Listening on http://${options.host ?? "localhost"}:${options.port} !`,
+        );
+    }
+
 
     if (options.staticLocalDir && options.staticServePath) {
       this.staticLocalDir = options.staticLocalDir;
