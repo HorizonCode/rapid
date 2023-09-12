@@ -1,4 +1,4 @@
-import { Status } from "https://deno.land/std@0.186.0/http/http_status.ts";
+import { Status } from "https://deno.land/std@0.201.0/http/http_status.ts";
 import prettyTime from "npm:pretty-time";
 import { HTTPServer, SessionExpire } from "../mod.ts";
 
